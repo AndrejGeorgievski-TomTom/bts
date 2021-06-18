@@ -65,7 +65,6 @@ for key, val in vars(__import__(args.model_name)).items():
 # Image shapes
 height_rgb, width_rgb = 480, 640
 height_depth, width_depth = height_rgb, width_rgb
-height_rgb = height_rgb
 
 import tensorflow as tf
 
@@ -75,6 +74,7 @@ graph = tf.get_default_graph()
 global sess
 # SESSION
 config = tf.ConfigProto(allow_soft_placement=True)
+config.gpu_options.per_process_gpu_memory_fraction=0.85
 sess = tf.Session(config=config)
 
 global image
@@ -90,7 +90,13 @@ camera_matrix[0, 2] = 3.2516069906172453e+02
 camera_matrix[1, 1] = 5.4801781476172562e+02
 camera_matrix[1, 2] = 2.4794113960783835e+02
 camera_matrix[2, 2] = 1
+camera_matrix[0, 0] = 1
+camera_matrix[0, 2] = 320
+camera_matrix[1, 1] = 1
+camera_matrix[1, 2] = 240
+camera_matrix[2, 2] = 1
 dist_coeffs = np.array([ 3.7230261423972011e-02, -1.6171708069773008e-01, -3.5260752900266357e-04, 1.7161234226767313e-04, 1.0192711400840315e-01 ])
+dist_coeffs = np.array([ 0, 0, 0, 0, 0 ])
 
 # Parameters for a model trained on NYU Depth V2
 new_camera_matrix = np.zeros(shape=(3, 3))
@@ -165,6 +171,34 @@ def edges(d):
     return np.abs(dx) + np.abs(dy)
 
 
+def resize_to_fit(image, width=None, height=None, interpolation=cv2.INTER_AREA):
+    dim = None
+    ratio = 0
+    height_original, width_original = image.shape[:2]
+
+    # if both the width and height are None, return the original image
+    if width is None and height is None:
+        return image
+    else:
+        if width is None:
+            ratio = height / float(height_original)
+            dim = (int(width_original * ratio), height)
+        elif height is None:
+            ratio = width/float(width_original)
+            dim = (width, int(height_original * ratio))
+        else:
+            ratio_widths = width/float(width_original) if width_original > width else float(width_original)/width
+            ratio_heights = height/float(height_original) if height_original > height else float(height_original)/height
+            if ratio_heights < ratio_widths:
+                ratio = ratio_heights
+                dim = (int(width_original*ratio), int(height_original*ratio))
+            else:
+                ratio = ratio_widths
+                dim = (int(width_original * ratio), int(height_original * ratio))
+        interpolation = cv2.INTER_CUBIC if ratio >= 1. else cv2.INTER_AREA
+    return cv2.resize(image, dim, interpolation=interpolation)
+
+
 # Main window
 class Window(QtWidgets.QWidget):
     updateInput = QtCore.Signal()
@@ -201,10 +235,18 @@ class Window(QtWidgets.QWidget):
         self.button2 = QtWidgets.QPushButton("Webcam")
         self.button2.clicked.connect(self.loadCamera)
         toolsLayout.addWidget(self.button2)
+
+        self.button3 = QtWidgets.QPushButton("Load Image File")
+        self.button3.clicked.connect(self.loadImageFile)
+        toolsLayout.addWidget(self.button3)
         
         self.button4 = QtWidgets.QPushButton("Pause")
         self.button4.clicked.connect(self.loadImage)
         toolsLayout.addWidget(self.button4)
+
+        self.button5 = QtWidgets.QPushButton("Load Video File")
+        self.button5.clicked.connect(self.loadVideoFile)
+        toolsLayout.addWidget(self.button5)
         
         self.button6 = QtWidgets.QPushButton("Refresh")
         self.button6.clicked.connect(self.updateCloud)
@@ -224,6 +266,7 @@ class Window(QtWidgets.QWidget):
             self.inputViewer.setPixmap(QtGui.QPixmap.fromImage(np_to_qimage(img)))
             coloredDepth = (plasma(self.glWidget.depth[:, :, 0])[:, :, :3] * 255).astype('uint8')
             self.outputViewer.setPixmap(QtGui.QPixmap.fromImage(np_to_qimage(coloredDepth)))
+        self.loadModel()
     
     def loadModel(self):
         QtGui.QGuiApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -231,19 +274,22 @@ class Window(QtWidgets.QWidget):
         self.model = load_model()
         print('Model loaded.')
         toc()
+
         self.updateCloud()
         QtGui.QGuiApplication.restoreOverrideCursor()
     
     def loadCamera(self):
         tic()
-        self.model = load_model()
+        #self.model = load_model()
         print('Model loaded.')
         toc()
         self.capture = cv2.VideoCapture(0)
         self.updateInput.emit()
     
     def loadVideoFile(self):
-        self.capture = cv2.VideoCapture('video.mp4')
+        filename = \
+            QtWidgets.QFileDialog.getOpenFileName(None, 'Select video file', '', self.tr('Video files (*.mp4)'))[0]
+        self.capture = cv2.VideoCapture(filename)
         self.updateInput.emit()
     
     def loadImage(self):
@@ -256,7 +302,10 @@ class Window(QtWidgets.QWidget):
         self.capture = None
         filename = \
         QtWidgets.QFileDialog.getOpenFileName(None, 'Select image', '', self.tr('Image files (*.jpg *.png)'))[0]
-        img = QtGui.QImage(filename).scaledToHeight(height_rgb)
+        image = cv2.imread(filename)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = resize_to_fit(image, width_rgb, height_rgb)
+        img = np_to_qimage(image)
         xstart = 0
         if img.width() > width_rgb: xstart = (img.width() - width_rgb) // 2
         img = img.copy(xstart, 0, xstart + width_rgb, height_rgb)
@@ -267,18 +316,19 @@ class Window(QtWidgets.QWidget):
         # Don't update anymore if no capture device is set
         if self.capture == None:
             return
-        
-        # Capture a frame
+
         ret, frame = self.capture.read()
         
         # Loop video playback if current stream is video file
         if not ret:
             self.capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             ret, frame = self.capture.read()
-        
+
+        # crop the frame to match the aspect ratio if necessary
+        frame = cv2.resize(frame, (width_rgb, height_rgb), interpolation=cv2.INTER_AREA)
+
         # Prepare image and show in UI
-        frame_ud = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR)
-        frame = cv2.cvtColor(frame_ud, cv2.COLOR_BGR2RGB)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         image = np_to_qimage(frame)
         self.inputViewer.setPixmap(QtGui.QPixmap.fromImage(image))
         
@@ -464,7 +514,7 @@ class GLWidget(QtOpenGL.QGLWidget):
         
         # Reshape
         points = self.posFromDepth(self.depth.copy())
-        colors = resize(self.rgb, (height, width)).reshape((height * width, 3))
+        colors = resize_to_fit(self.rgb, width, height).reshape((width*height, 3))
         
         # Flatten and convert to float32
         self.pos = points.astype('float32')

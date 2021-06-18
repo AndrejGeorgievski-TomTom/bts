@@ -29,7 +29,7 @@ python3 utils/download_from_gdrive.py 1nhukEgl3YdTBKVzcjxUp6ZFMsKKM3xfg tensorfl
 cd tensorflow/models && unzip bts_eigen_v2.zip
 
 # Setup build
-cd tensorflow/custom_layer/
+cd ../tensorflow/custom_layer/
 mkdir build && cd build
 # The code needs CUDA 10.0 (tested by the authors).
 # To specify which cuda version you want to use with CMake, use 
