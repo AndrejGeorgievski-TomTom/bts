@@ -24,6 +24,7 @@ python3 -m pip install -r "${BTS_CODE_DIR}/tensorflow/requirements.txt"
 # Download model from Google Drive
 TF_MODELS_DIR="${BTS_CODE_DIR}/tensorflow/models"
 mkdir -p "${TF_MODELS_DIR}"
+echo "Downloading Tensorflow KITTI pre-trained model..."
 python3 "${BTS_CODE_DIR}/utils/download_from_gdrive.py" \
   1nhukEgl3YdTBKVzcjxUp6ZFMsKKM3xfg "${TF_MODELS_DIR}/bts_eigen_v2.zip"
 cd "${TF_MODELS_DIR}" && unzip bts_eigen_v2.zip
@@ -32,6 +33,7 @@ cd "${TF_MODELS_DIR}" && unzip bts_eigen_v2.zip
 TF_CUSTOM_LAYER_DIR="${BTS_CODE_DIR}/tensorflow/custom_layer"
 cd "${TF_CUSTOM_LAYER_DIR}"
 BTS_BUILD_DIR="${TF_CUSTOM_LAYER_DIR}/build"
+echo "Setting up build directories and options..."
 mkdir -p "${BTS_BUILD_DIR}" && cd "${BTS_BUILD_DIR}"
 # The code needs CUDA 10.0 (tested by the authors).
 # To specify which cuda version you want to use with CMake, use 
