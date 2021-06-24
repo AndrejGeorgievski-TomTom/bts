@@ -16,7 +16,7 @@ cd "${BTS_CODE_DIR}"
 python3 -m pip install --upgrade pip
 python3 -m pip install virtualenv
 
-python3 -m virtualenv venv-bts
+python3 -m virtualenv venv-bts --python=/usr/bin/python3
 source "${BTS_CODE_DIR}/venv-bts/bin/activate"
 PYTHONPATH=""
 python3 -m pip install -r "${BTS_CODE_DIR}/tensorflow/requirements.txt"

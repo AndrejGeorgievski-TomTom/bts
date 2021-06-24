@@ -37,12 +37,12 @@ graph = tf.get_default_graph()
 global sess
 # SESSION
 config = tf.ConfigProto(allow_soft_placement=True)
-config.gpu_options.per_process_gpu_memory_fraction=0.80
+config.gpu_options.per_process_gpu_memory_fraction=0.60
 sess = tf.Session(config=config)
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description='BTS Live 3D')
+    parser = argparse.ArgumentParser(description='BTS on images')
     parser.add_argument('images_folder')
     parser.add_argument('--model_name', type=str, help='model name', default='bts_nyu_v2')
     parser.add_argument('--encoder', type=str, help='type of encoder, densenet121_bts or densenet161_bts',
@@ -147,7 +147,7 @@ class BTSDepthPredictor:
         return image
 
     def _upscale_depth(self, depth_image, original_width, original_height):
-        return cv2.resize(depth_image, (original_height, original_width),
+        return cv2.resize(depth_image, (original_width, original_height),
                           interpolation=cv2.INTER_CUBIC)
 
     def predict(self, rgb_image):
