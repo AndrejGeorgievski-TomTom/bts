@@ -1,4 +1,10 @@
-opencv-python
-scipy
-tqdm
-requests
+opencv-python==4.5.2.54
+scipy==1.5.4
+tqdm==4.61.0
+requests==2.25.1
+scikit-image==0.17.2
+matplotlib==3.3.4
+tensorflow-gpu==1.13.1
+PySide2==5.12
+pyopengl==3.1.5
+pyglm==2.2.0
