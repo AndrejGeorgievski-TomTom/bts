@@ -74,7 +74,7 @@ graph = tf.get_default_graph()
 global sess
 # SESSION
 config = tf.ConfigProto(allow_soft_placement=True)
-config.gpu_options.per_process_gpu_memory_fraction=0.85
+config.gpu_options.per_process_gpu_memory_fraction=0.65
 sess = tf.Session(config=config)
 
 global image
@@ -207,6 +207,7 @@ class Window(QtWidgets.QWidget):
         QtWidgets.QWidget.__init__(self, parent)
         self.model = None
         self.capture = None
+        self.raw_depth_result = None
         self.glWidget = GLWidget()
         
         mainLayout = QtWidgets.QVBoxLayout()
@@ -304,7 +305,8 @@ class Window(QtWidgets.QWidget):
         QtWidgets.QFileDialog.getOpenFileName(None, 'Select image', '', self.tr('Image files (*.jpg *.png)'))[0]
         image = cv2.imread(filename)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = resize_to_fit(image, width_rgb, height_rgb)
+        image = cv2.resize(image, (width_rgb, height_rgb), interpolation=cv2.INTER_LINEAR)
+        # image = resize_to_fit(image, width_rgb, height_rgb)
         img = np_to_qimage(image)
         xstart = 0
         if img.width() > width_rgb: xstart = (img.width() - width_rgb) // 2
@@ -353,15 +355,16 @@ class Window(QtWidgets.QWidget):
             
             with graph.as_default():
                 depth_cropped = sess.run([self.model.depth_est], feed_dict={image: input_images})
-            
-            depth = np.zeros((480, 640), dtype=np.float32)
-            depth[32:-1-31, 32:-1-31] = depth_cropped[0].squeeze() / args.max_depth
-            coloredDepth = (greys(np.log10(depth * args.max_depth))[:, :, :3] * 255).astype('uint8')
+
+            self.raw_depth_result = np.zeros((480, 640), dtype=np.float32)
+            self.raw_depth_result[32:-1-31, 32:-1-31] = depth_cropped[0].squeeze()
+            coloredDepth = (greys(np.log10(self.raw_depth_result))[:, :, :3] * 255).astype('uint8')
             self.outputViewer.setPixmap(QtGui.QPixmap.fromImage(np_to_qimage(coloredDepth)))
-            self.glWidget.depth = depth
+            self.glWidget.depth = self.raw_depth_result / args.max_depth
 
         else:
             self.glWidget.depth = 0.5 + np.zeros((height_rgb // 2, width_rgb // 2, 1))
+            self.raw_depth_result = np.zeros((480, 640), dtype=np.float32) + 0.5
         
         self.glWidget.updateRGBD()
         self.glWidget.updateGL()
