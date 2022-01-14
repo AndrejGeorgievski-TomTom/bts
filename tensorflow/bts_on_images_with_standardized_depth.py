@@ -28,7 +28,6 @@ import numpy as np
 
 import cv2
 import tensorflow as tf
-from PIL import Image as PIL_Image
 
 # Get rid of Tensorflow warnings
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -56,20 +55,6 @@ def build_parser():
                         help='Considers the IMAGES_FOLDER arg as a tree root.')
     parser.add_argument('--upscaled', action="store_true",
                         help='Upscales the resulting depths to the original image size(s).')
-    parser.add_argument("--fx", help="focal length x in pixels",
-                        type=float, required=True)
-    parser.add_argument("--fy", help="focal length y in pixels",
-                        type=float, required=True)
-    parser.add_argument("--px", help="principal point x in pixels",
-                        type=float, required=True)
-    parser.add_argument("--py", help="principal point y in pixels",
-                        type=float, required=True)
-    parser.add_argument("--min_depth_percentile",
-                        help="minimum visualization depth percentile",
-                        type=float, default=5)
-    parser.add_argument("--max_depth_percentile",
-                        help="maximum visualization depth percentile",
-                        type=float, default=95)
     return parser
 
 
@@ -219,17 +204,13 @@ if __name__ == '__main__':
     #                    L subfolder/s
     #                      L 0000011102.jpg.nn.bin
     created_dirs = list()
-    suffix_depth_maps = '.nn.bin'
-    images_remaining = len(images_to_process)
+    suffix_depth_maps = '.geometric.bin'
     for image_location in images_to_process:
         image_rgb = cv2.cvtColor(cv2.imread(image_location), cv2.COLOR_BGR2RGB)
         if image_rgb.shape[1] > image_rgb.shape[0]:
             image_rgb = cv2.rotate(image_rgb, cv2.ROTATE_90_CLOCKWISE)
         raw_depth_result = bts_predictor.predict(image_rgb)
-        images_remaining -= 1
 
-        if images_remaining % 100 == 0:
-            print("{count} images remaining.".format(count=images_remaining))
         if args.save_depth_maps:
             image_path = pathlib.Path(image_location)
             depth_map_dir = None
@@ -253,32 +234,6 @@ if __name__ == '__main__':
             if str(depth_map_dir) not in created_dirs:
                 os.makedirs(str(depth_map_dir), exist_ok=True)
                 created_dirs.append(str(depth_map_dir))
-                os.makedirs(str(depth_map_dir/"24bit_png"), exist_ok=True)
-                created_dirs.append(str(depth_map_dir/"24bit_png"))
 
             write_array(raw_depth_result, str(depth_map_dir / depth_map_filename))
-
-            min_depth, max_depth = np.percentile(
-                raw_depth_result, [args.min_depth_percentile, args.max_depth_percentile])
-            # print(f"min_depth={min_depth}, max_depth={max_depth}")
-
-            for i in range(raw_depth_result.shape[0]):
-                for j in range(raw_depth_result.shape[1]):
-                    x = (float(j) - args.px - 0.5) * raw_depth_result[i, j] / args.fx
-                    y = (float(i) - args.py - 0.5) * raw_depth_result[i, j] / args.fy
-
-                    radial_depth = np.sqrt(x * x + y * y + raw_depth_result[i, j] * raw_depth_result[i, j])
-                    raw_depth_result[i, j] = radial_depth
-
-            raw_depth_result[raw_depth_result < min_depth] = min_depth
-            raw_depth_result[raw_depth_result > max_depth] = max_depth
-
-            inverse_depth = 1. / (1 + raw_depth_result) / 0.00001
-            depth_result_24bit = np.zeros((*raw_depth_result.shape, 3), np.uint8)
-            depth_result_24bit[:, :, 0] = inverse_depth.astype(int) & 255
-            depth_result_24bit[:, :, 1] = inverse_depth.astype(int) >> 8 & 255
-            depth_result_24bit[:, :, 2] = inverse_depth.astype(int) >> 16 & 255
-            PIL_Image.fromarray(depth_result_24bit).save(str(depth_map_dir / "24bit_png" / depth_map_filename) + ".png",
-                                                         "PNG")
-
     print('Done! All images processed successfully.')
